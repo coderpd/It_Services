@@ -1,224 +1,312 @@
-"use client";
-import { useEffect, useState } from "react";
+﻿"use client";
+import { API_BASE_URL } from "@/lib/api/config";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowBigLeftDash } from "lucide-react";
-import { FiEdit2 } from "react-icons/fi";
-import { AiOutlineLoading3Quarters } from "react-icons/ai";
 import CustomerAdminNavbar from "../components/customerAdminNavbar";
 import Swal from "sweetalert2";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import "./customerAdminProfile.css";
+import { useAuth } from "@/app/contexts/AuthContext";
 
+/* ─── Field Config ───────────────────────────────────────── */
+const PROFILE_FIELDS = [
+  { label: "Company Name",        name: "company_name",        editable: false },
+  { label: "Registration Number", name: "registration_number", editable: true,  type: "text"  },
+  { label: "Company Website",     name: "company_website",     editable: true,  type: "url"   },
+  { label: "GST Number",          name: "gst_number",          editable: true,  type: "text"  },
+  { label: "First Name",          name: "first_name",          editable: true,  type: "text"  },
+  { label: "Last Name",           name: "last_name",           editable: true,  type: "text"  },
+  { label: "Phone",               name: "phone",               editable: true,  type: "tel"   },
+  { label: "Email",               name: "email",               editable: false, type: "email" },
+  { label: "Address",             name: "address",             editable: true,  type: "text"  },
+  { label: "Country",             name: "country",             editable: true,  type: "text"  },
+  { label: "State",               name: "state",               editable: true,  type: "text"  },
+  { label: "City",                name: "city",                editable: true,  type: "text"  },
+  { label: "Pincode",             name: "pincode",             editable: true,  type: "text"  },
+];
+
+/* ─── Helpers ────────────────────────────────────────────── */
+const getAuthToken = () =>
+  typeof window !== "undefined"
+    ? sessionStorage.getItem("token")
+    : null;
+
+const getInitials = (first_name, last_name) => {
+  const f = first_name?.[0] || "";
+  const l = last_name?.[0] || "";
+  return (f + l).toUpperCase() || "CA";
+};
+
+/* ─── Sub-components ─────────────────────────────────────── */
+function SectionTitle({ children }) {
+  return <p className="vp-section-title">{children}</p>;
+}
+
+function InfoItem({ label, value }) {
+  return (
+    <div className="vp-info-item">
+      <span className="vp-info-label">{label}</span>
+      <span className={`vp-info-value ${!value ? "not-provided" : ""}`}>
+        {value || "Not provided"}
+      </span>
+    </div>
+  );
+}
+
+function FormField({ label, fieldKey, value, onChange, editable = true, type = "text" }) {
+  return (
+    <div className="vp-form-field">
+      <label className="vp-form-label" htmlFor={fieldKey}>{label}</label>
+      <input
+        id={fieldKey}
+        name={fieldKey}
+        type={type}
+        value={value || ""}
+        onChange={onChange}
+        disabled={!editable}
+        className="vp-form-input"
+        autoComplete="off"
+      />
+    </div>
+  );
+}
+
+/* ─── Main Component ─────────────────────────────────────── */
 const CustomerAdminProfile = () => {
-  const [customer, setCustomer] = useState(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({});
-  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const { getAuthToken: getAuthTokenFromContext, setCustomer: setAuthCustomer } = useAuth();
 
-  useEffect(() => {
-    const storedCustomer = localStorage.getItem("customer");
-    if (!storedCustomer) {
-      router.push("/login");
-    } else {
-      const customerData = JSON.parse(storedCustomer);
-      setCustomer(customerData);
-      setFormData(customerData);
-    }
-  }, [router]);
+  const [profile, setProfile]     = useState(null);
+  const [formData, setFormData]   = useState({});
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving]   = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prevData) => ({
-      ...prevData,
-      [name]: value,
-    }));
-  };
+  /* ── Fetch profile ── */
+  const fetchProfile = useCallback(async () => {
+    const token = getAuthTokenFromContext() || getAuthToken();
+    if (!token) { router.push("/SignIn"); return; }
 
-  const handleSave = async () => {
-    setIsLoading(true);
     try {
-      const updatedFormData = { ...formData, id: customer.id };
-
-      const response = await fetch("/api/customer-edit/update-profile", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedFormData),
+      const res = await fetch(`${API_BASE_URL}/api/user-admin/profile`, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` },
       });
 
-      if (response.ok) {
-        localStorage.setItem("customer", JSON.stringify(formData));
-        setCustomer(formData);
-        setIsEditing(false);
-
-        // Trigger navbar update
-        window.dispatchEvent(new Event("storage"));
-
-        Swal.fire({
-          icon: "success",
-          title: "Profile Updated",
-          text: "Your profile has been updated successfully!",
-          confirmButtonColor: "#3085d6",
-          confirmButtonText: "OK",
-        });
-      } else {
-        const errorData = await response.json();
-        Swal.fire({
-          icon: "error",
-          title: "Update Failed",
-          text: errorData.message || "Failed to update profile. Try again.",
-        });
+      if (!res.ok) {
+        if (res.status === 401) { router.push("/SignIn"); return; }
+        throw new Error("Failed to fetch profile");
       }
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: "Something went wrong",
-        text: "Try again later.",
-      });
+
+      const data = await res.json();
+      const latest = data.profile || data;
+      setProfile(latest);
+      setAuthCustomer(latest);
+      setFormData(latest);
+    } catch (err) {
+      console.error("Profile fetch error:", err);
+      Swal.fire({ icon: "error", title: "Error", text: "Could not load your profile." });
     } finally {
       setIsLoading(false);
     }
+  }, [router]);
+
+  useEffect(() => { fetchProfile(); }, [fetchProfile]);
+
+  /* ── Handlers ── */
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  if (!customer) {
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (isSaving) return;
+    setIsSaving(true);
+
+    try {
+      const token = getAuthTokenFromContext() || getAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/user-admin/profile`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          companyName:        formData.company_name,
+          registrationNumber: formData.registration_number,
+          companyWebsite:     formData.company_website,
+          gstNumber:          formData.gst_number,
+          firstName:          formData.first_name,
+          lastName:           formData.last_name,
+          phone:              formData.phone,
+          address:            formData.address,
+          country:            formData.country,
+          state:              formData.state,
+          city:               formData.city,
+          pincode:            formData.pincode,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || "Update failed");
+      }
+
+      await fetchProfile();
+      setIsEditing(false);
+
+      Swal.fire({
+        icon: "success",
+        title: "Profile Updated",
+        text: "Your changes have been saved.",
+        confirmButtonColor: "#1a56db",
+        timer: 2500,
+        showConfirmButton: false,
+      });
+    } catch (err) {
+      Swal.fire({ icon: "error", title: "Update Failed", text: err.message });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setFormData(profile);
+    setIsEditing(false);
+  };
+
+  /* ── Loading ── */
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse">Loading profile...</div>
+      <div className="vp-loading">
+        <div className="vp-loading-spinner" />
+        <span>Loading your profile…</span>
       </div>
     );
   }
 
-  const profileFields = [
-    { label: "Company Name", name: "companyName", disabled: true },
-    { label: "Registration Number", name: "registrationNumber" },
-    { label: "Company Website", name: "companyWebsite" },
-    { label: "GST Number", name: "gstNumber" },
-    { label: "First Name", name: "firstName" },
-    { label: "Last Name", name: "lastName" },
-    { label: "Phone Number", name: "phoneNumber" },
-    { label: "Email", name: "email", type: "email", disabled: true },
-    { label: "Address", name: "address" },
-    { label: "Country", name: "country" },
-    { label: "State", name: "state" },
-    { label: "City", name: "city" },
-    { label: "Postal Code", name: "postalCode" },
-  ];
+  if (!profile) return null;
 
+  /* ── Render ── */
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="vp-page">
       <CustomerAdminNavbar />
-      
-      <div className="bg-gray-50 flex-1 pt-5 pb-12 ">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center mb-8">
-            <button
-              onClick={() => router.push("/customer-admin/")}
-              className="mr-4 p-2 rounded-full hover:bg-gray-100 transition-colors"
-              aria-label="Back to dashboard"
-            >
-              <ArrowBigLeftDash className="h-6 w-6 text-gray-600" />
-            </button>
-            <h1 className="text-2xl -ml-4 font-bold text-gray-800">My Profile</h1>
-          </div>
 
-          <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 flex items-center">
-              <div className="relative">
-                <img
-                  src="/User_Icon.jpg"
-                  alt="Profile"
-                  className="h-20 w-20 rounded-full object-cover border-4 border-white shadow-md"
-                />
-                {isEditing && (
-                  <div className="absolute bottom-0 right-0 bg-blue-100 p-1.5 rounded-full border-2 border-white">
-                    <FiEdit2 className="text-blue-600 h-4 w-4" />
-                  </div>
-                )}
+      <div className="vp-container">
+
+        <button className="vp-back-btn" onClick={() => router.back()}>
+          ← Back
+        </button>
+
+        <div className="vp-card">
+
+          {/* ── Header ── */}
+          <div className="vp-card-header">
+            <div className="vp-avatar-wrapper">
+              <div className="vp-avatar-initials">
+                {getInitials(profile.first_name, profile.last_name)}
               </div>
-              <div className="ml-5">
-                <h2 className="text-xl font-semibold text-gray-800">
-                  {customer.firstName} {customer.lastName}
-                </h2>
-                <p className="text-sm text-gray-600">Customer Admin</p>
-              </div>
+              <div className="vp-avatar-badge" />
             </div>
 
-            <div className="p-6">
-              {!isEditing ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {Object.entries(customer)
-                    .filter(([key]) => !["id", "password", "created_at"].includes(key))
-                    .map(([key, value]) => (
-                      <div key={key} className="space-y-1">
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          {key.replace(/([A-Z])/g, " $1").replace(/^./, str => str.toUpperCase())}
-                        </p>
-                        <p className="text-base font-medium text-gray-800 break-words">
-                          {value || <span className="text-gray-400 italic">Not provided</span>}
-                        </p>
-                      </div>
-                    ))}
-                </div>
-              ) : (
-                <form onSubmit={(e) => { e.preventDefault(); handleSave(); }} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {profileFields.map(({ label, name, type = "text", disabled }) => (
-                      <div key={name} className="space-y-2">
-                        <Label htmlFor={name} className="text-gray-700">
-                          {label}
-                        </Label>
-                        <Input
-                          id={name}
-                          name={name}
-                          type={type}
-                          value={formData[name] || ""}
-                          onChange={handleChange}
-                          className="focus:ring-2 focus:ring-blue-500"
-                          disabled={disabled}
-                        />
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex justify-end space-x-3 pt-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setFormData(customer);
-                        setIsEditing(false);
-                      }}
-                      disabled={isLoading}
-                    >
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={isLoading}>
-                      {isLoading ? (
-                        <span className="flex items-center">
-                          <AiOutlineLoading3Quarters className="animate-spin mr-2 h-4 w-4" />
-                          Saving...
-                        </span>
-                      ) : (
-                        "Save Changes"
-                      )}
-                    </Button>
-                  </div>
-                </form>
-              )}
-
-              {!isEditing && (
-                <div className="flex justify-end mt-8">
-                  <Button
-                    onClick={() => setIsEditing(true)}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    Edit Profile
-                  </Button>
-                </div>
-              )}
+            <div className="vp-header-info">
+              <h1 className="vp-header-name">
+                {profile.first_name} {profile.last_name}
+              </h1>
+              <p className="vp-header-role">{profile.email}</p>
+              <span className="vp-header-badge">✦ Customer Admin</span>
             </div>
           </div>
+
+          {/* ── Body ── */}
+          <div className="vp-card-body">
+            {!isEditing ? (
+              <>
+                <SectionTitle>Company Information</SectionTitle>
+                <div className="vp-info-grid">
+                  {PROFILE_FIELDS.slice(0, 4).map(({ label, name }) => (
+                    <InfoItem key={name} label={label} value={profile[name]} />
+                  ))}
+                </div>
+
+                <div className="vp-divider" />
+
+                <SectionTitle>Personal Information</SectionTitle>
+                <div className="vp-info-grid">
+                  {PROFILE_FIELDS.slice(4, 8).map(({ label, name }) => (
+                    <InfoItem key={name} label={label} value={profile[name]} />
+                  ))}
+                </div>
+
+                <div className="vp-divider" />
+
+                <SectionTitle>Address Details</SectionTitle>
+                <div className="vp-info-grid">
+                  {PROFILE_FIELDS.slice(8).map(({ label, name }) => (
+                    <InfoItem key={name} label={label} value={profile[name]} />
+                  ))}
+                </div>
+
+                <div className="vp-actions">
+                  <button className="vp-btn vp-btn-primary" onClick={() => setIsEditing(true)}>
+                    ✎ Edit Profile
+                  </button>
+                </div>
+              </>
+            ) : (
+              <form onSubmit={handleSave}>
+                <SectionTitle>Company Information</SectionTitle>
+                <div className="vp-form-grid">
+                  {PROFILE_FIELDS.slice(0, 4).map(({ label, name, editable, type }) => (
+                    <FormField key={name} label={label} fieldKey={name}
+                      value={formData[name]} onChange={handleChange}
+                      editable={editable} type={type} />
+                  ))}
+                </div>
+
+                <div className="vp-divider" />
+
+                <SectionTitle>Personal Information</SectionTitle>
+                <div className="vp-form-grid">
+                  {PROFILE_FIELDS.slice(4, 8).map(({ label, name, editable, type }) => (
+                    <FormField key={name} label={label} fieldKey={name}
+                      value={formData[name]} onChange={handleChange}
+                      editable={editable} type={type} />
+                  ))}
+                </div>
+
+                <div className="vp-divider" />
+
+                <SectionTitle>Address Details</SectionTitle>
+                <div className="vp-form-grid">
+                  {PROFILE_FIELDS.slice(8).map(({ label, name, editable, type }) => (
+                    <FormField key={name} label={label} fieldKey={name}
+                      value={formData[name]} onChange={handleChange}
+                      editable={editable} type={type} />
+                  ))}
+                </div>
+
+                <div className="vp-btn-group">
+                  <button type="button" className="vp-btn vp-btn-outline"
+                    onClick={handleCancelEdit} disabled={isSaving}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="vp-btn vp-btn-primary" disabled={isSaving}>
+                    {isSaving ? (
+                      <>
+                        <svg className="vp-spin" width="15" height="15" viewBox="0 0 24 24"
+                          fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                        </svg>
+                        Saving…
+                      </>
+                    ) : "Save Changes"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+
         </div>
       </div>
     </div>

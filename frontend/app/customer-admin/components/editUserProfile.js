@@ -1,4 +1,5 @@
-"use client";
+﻿"use client";
+import { API_BASE_URL } from "@/lib/api/config";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,8 +22,10 @@ import {
 import Swal from "sweetalert2";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, UserCog, Loader2 } from "lucide-react";
+import { useAuth } from "@/app/contexts/AuthContext";
 
 export const EditUserForm = ({ user, onClose, onUpdate }) => {
+  const { getAuthToken: getAuthTokenFromContext } = useAuth();
   const [formData, setFormData] = useState({
     companyName: "",
     personName: "",
@@ -57,29 +60,29 @@ export const EditUserForm = ({ user, onClose, onUpdate }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
-  
-    const { companyName, personName, contactNumber , Email, status } = formData;
-  
+
+    const { companyName, personName, contactNumber, Email, status } = formData;
+
     try {
       let userId = user?.id;
-  
+
       if (!userId) {
         throw new Error("No user ID found in user object");
       }
-  
+
       // Force userId to be number
       userId = Number(userId);
       if (isNaN(userId)) {
         throw new Error(`Invalid user ID format: ${user.id}`);
       }
-  
+
       const response = await fetch(
-        `/api/auth/customerUserSignUp/users/${user.id}`,
+        `${API_BASE_URL}/api/customer-users/profile/${user.id}`,
         {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
+            Authorization: `Bearer ${getAuthTokenFromContext() || sessionStorage.getItem("token")}`,
           },
           body: JSON.stringify({
             companyName,
@@ -90,13 +93,13 @@ export const EditUserForm = ({ user, onClose, onUpdate }) => {
           }),
         }
       );
-  
+
       const data = await response.json();
-  
+
       if (!response.ok) {
         throw new Error(data.message || "Something went wrong");
       }
-  
+
       Swal.fire("Success", data.message, "success");
       onUpdate(); // Refresh the user list
       onClose(); // Close the modal
@@ -110,16 +113,16 @@ export const EditUserForm = ({ user, onClose, onUpdate }) => {
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        initial={ { opacity: 0 } }
+        animate={ { opacity: 1 } }
+        exit={ { opacity: 0 } }
         className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       >
         <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: 20, opacity: 0 }}
-          transition={{ type: "spring", damping: 30 }}
+          initial={ { y: 20, opacity: 0 } }
+          animate={ { y: 0, opacity: 1 } }
+          exit={ { y: 20, opacity: 0 } }
+          transition={ { type: "spring", damping: 30 } }
           className="w-full max-w-md"
         >
           <Card className="shadow-2xl rounded-xl border-0 relative overflow-hidden">
@@ -139,7 +142,7 @@ export const EditUserForm = ({ user, onClose, onUpdate }) => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={onClose}
+                  onClick={ onClose }
                   className="rounded-full text-gray-500 hover:text-gray-700 hover:bg-gray-100"
                 >
                   <X className="w-4 h-4" />
@@ -147,7 +150,7 @@ export const EditUserForm = ({ user, onClose, onUpdate }) => {
               </div>
             </CardHeader>
 
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={ handleSubmit }>
               <CardContent className=" px-6 py-4 grid grid-cols-2 gap-2">
                 <div className="space-y-3">
                   <Label
@@ -159,8 +162,8 @@ export const EditUserForm = ({ user, onClose, onUpdate }) => {
                   <Input
                     id="companyName"
                     name="companyName"
-                    value={formData.companyName}
-                    onChange={handleChange}
+                    value={ formData.companyName }
+                    onChange={ handleChange }
                     className="focus-visible:ring-2 focus-visible:ring-blue-500"
                     required
                   />
@@ -176,8 +179,8 @@ export const EditUserForm = ({ user, onClose, onUpdate }) => {
                   <Input
                     id="personName"
                     name="personName"
-                    value={formData.personName}
-                    onChange={handleChange}
+                    value={ formData.personName }
+                    onChange={ handleChange }
                     className="focus-visible:ring-2 focus-visible:ring-blue-500"
                     required
                   />
@@ -194,8 +197,8 @@ export const EditUserForm = ({ user, onClose, onUpdate }) => {
                     id="Email"
                     name="Email"
                     type="email"
-                    value={formData.Email}
-                    onChange={handleChange}
+                    value={ formData.Email }
+                    onChange={ handleChange }
                     className="focus-visible:ring-2 focus-visible:ring-blue-500"
                     required
                   />
@@ -211,8 +214,8 @@ export const EditUserForm = ({ user, onClose, onUpdate }) => {
                   <Input
                     id="contactNumber"
                     name="contactNumber"
-                    value={formData.contactNumber}
-                    onChange={handleChange}
+                    value={ formData.contactNumber }
+                    onChange={ handleChange }
                     className="focus-visible:ring-2 focus-visible:ring-blue-500"
                     required
                   />
@@ -226,8 +229,8 @@ export const EditUserForm = ({ user, onClose, onUpdate }) => {
                     Status
                   </Label>
                   <Select
-                    value={formData.status}
-                    onValueChange={handleStatusChange}
+                    value={ formData.status }
+                    onValueChange={ handleStatusChange }
                   >
                     <SelectTrigger className="w-full focus:ring-2 focus:ring-blue-500">
                       <SelectValue placeholder="Select status" />
@@ -254,7 +257,7 @@ export const EditUserForm = ({ user, onClose, onUpdate }) => {
                 <Button
                   variant="outline"
                   type="button"
-                  onClick={onClose}
+                  onClick={ onClose }
                   className="border-gray-300 hover:bg-gray-100"
                 >
                   Cancel
@@ -262,16 +265,16 @@ export const EditUserForm = ({ user, onClose, onUpdate }) => {
                 <Button
                   type="submit"
                   className="bg-blue-600 hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
-                  disabled={isSubmitting}
+                  disabled={ isSubmitting }
                 >
-                  {isSubmitting ? (
+                  { isSubmitting ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Saving...
                     </>
                   ) : (
                     "Save Changes"
-                  )}
+                  ) }
                 </Button>
               </CardFooter>
             </form>
